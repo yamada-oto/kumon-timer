@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>公文タイマー</title>
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent;touch-action:manipulation}
+html,body{margin:0;height:100%}
+body{font-family:-apple-system,"Hiragino Sans",sans-serif;background:#f4f7ff;color:#223;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+.screen{display:none;min-height:100%;padding:24px 5vw 40px}
+.screen.on{display:block}
+h1{font-size:34px;margin:0 0 16px}
+h2{font-size:26px;margin:20px 0 10px}
+.btn{display:inline-block;font-size:30px;font-weight:bold;padding:20px 32px;margin:8px 8px 8px 0;border-radius:18px;border:3px solid #2a5bd7;background:#fff;color:#2a5bd7;-webkit-appearance:none;font-family:inherit}
+.btn.main{background:#2a5bd7;color:#fff}
+.btn.sub{font-size:22px;padding:14px 22px;border-color:#889;color:#445}
+.btn.warn{border-color:#c33;color:#c33}
+.btn:disabled{opacity:.35}
+.btn:active{opacity:.7}
+.people{display:flex;flex-wrap:wrap}
+.person{font-size:32px;font-weight:bold;padding:22px 34px;margin:8px 12px 8px 0;border-radius:20px;border:4px solid #9ab;background:#fff;color:#334;-webkit-appearance:none;font-family:inherit}
+.person.sel{border-color:#2a5bd7;background:#dfe8ff;color:#123}
+.row{margin:12px 0}
+input[type=text],textarea{font-size:26px;padding:12px;border:3px solid #9ab;border-radius:12px;font-family:inherit;-webkit-user-select:text;user-select:text;background:#fff}
+input[type=text]{width:260px}
+textarea{width:100%;height:160px;font-size:16px}
+.note{font-size:20px;color:#556}
+.err{color:#c00;font-size:22px;font-weight:bold}
+.card{background:#fff;border:2px solid #cde;border-radius:18px;padding:16px 22px;margin:12px 0}
+.stepper{display:flex;align-items:center}
+.stepper .num{font-size:80px;font-weight:bold;min-width:130px;text-align:center}
+.stepper .btn{font-size:50px;padding:6px 36px;margin:0}
+#clock{font-family:Menlo,"Courier New",monospace;font-weight:bold;font-size:20vmin;text-align:center;margin:3vh 0}
+#pagelabel{font-size:7vmin;font-weight:bold;text-align:center}
+#hint{font-size:4vmin;text-align:center;color:#556;min-height:1.4em}
+#cd{font-size:34vmin;font-weight:bold;text-align:center;color:#d6532a;line-height:1.1}
+#done{display:block;width:100%;font-size:11vmin;padding:6vh 0;margin:2vh 0;border-radius:30px;border:0;background:#2a5bd7;color:#fff;font-weight:bold;-webkit-appearance:none;font-family:inherit}
+#done:active{background:#1a3ba0}
+#done.start{background:#1a9a4a}
+#flash{font-size:9vmin;font-weight:bold;text-align:center;color:#e0301e;min-height:1.3em}
+table{border-collapse:collapse;width:100%;font-size:28px;background:#fff}
+td,th{padding:10px 12px;border-bottom:1px solid #dde;text-align:left}
+td.t{font-family:Menlo,monospace;font-weight:bold;text-align:right}
+.tag{display:inline-block;font-size:22px;font-weight:bold;color:#fff;background:#e0701e;border-radius:10px;padding:2px 10px;margin-left:6px}
+.tag.rec{background:#d6303a}
+.tag.best{background:#7a35c8}
+.sum{font-size:34px;font-weight:bold}
+.sum span{font-family:Menlo,monospace}
+.modal{display:none;position:fixed;left:0;top:0;right:0;bottom:0;background:rgba(0,0,0,.5);z-index:10;align-items:center;justify-content:center}
+.modal.on{display:flex}
+.modal .box{background:#fff;border-radius:22px;padding:30px;max-width:600px;margin:20px;font-size:28px}
+</style>
+</head>
+<body>
+
+<!-- ホーム: 人を選ぶ -->
+<div class="screen on" id="s-home">
+  <h1>公文タイマー</h1>
+  <h2>だれがやる?</h2>
+  <div class="people" id="people"></div>
+  <div class="note" id="nopeople" style="display:none">まだ人がいません。下で名前を入れて「ついか」を押してください。</div>
+  <div class="row">
+    <input type="text" id="newname" maxlength="10" placeholder="例: ひと1">
+    <button class="btn sub" id="addperson">ついか</button>
+  </div>
+  <div class="err" id="homeerr"></div>
+  <div class="row">
+    <button class="btn main" id="tosheets" disabled>つぎへ</button>
+    <button class="btn sub" id="torecords" disabled>きろくを見る</button>
+    <button class="btn sub" id="todata">きろくの書き出し・読み込み</button>
+  </div>
+  <div class="note">名前と記録は、この iPad の中だけに保存されます。</div>
+</div>
+
+<!-- 枚数 -->
+<div class="screen" id="s-sheets">
+  <h1><span id="who1"></span> さん</h1>
+  <h2>なんまい やる?</h2>
+  <div class="stepper">
+    <button class="btn" id="minus">−</button>
+    <div class="num" id="sheetnum">3</div>
+    <button class="btn" id="plus">+</button>
+    <div style="font-size:36px;margin-left:12px">まい</div>
+  </div>
+  <div class="note" style="margin-top:12px">1まいは おもてと うら。はかる回数は <b id="pagecnt"></b> 回です。</div>
+  <div class="err" id="storeerr"></div>
+  <div class="row">
+    <button class="btn sub" id="back1">もどる</button>
+    <button class="btn main" id="gomeasure">けいそくへ</button>
+  </div>
+</div>
+
+<!-- 測る -->
+<div class="screen" id="s-measure">
+  <div id="pagelabel"></div>
+  <div id="hint"></div>
+  <div id="clock">0:00.00</div>
+  <div id="cd" style="display:none"></div>
+  <div id="flash"></div>
+  <button id="done" class="start">スタート</button>
+  <button class="btn sub warn" id="abort">やめる</button>
+</div>
+
+<!-- 結果 -->
+<div class="screen" id="s-result">
+  <h1><span id="who2"></span> さん けっか</h1>
+  <table id="restable"></table>
+  <div class="card">
+    <div class="sum">ごうけい <span id="rtotal"></span></div>
+    <div class="sum">へいきん <span id="ravg"></span> (1ページ)</div>
+  </div>
+  <div class="card" id="cmp"></div>
+  <div class="err" id="saveerr"></div>
+  <button class="btn main" id="rhome">おわり</button>
+</div>
+
+<!-- 記録 -->
+<div class="screen" id="s-records">
+  <h1><span id="who3"></span> さんの きろく</h1>
+  <div class="card" id="bests"></div>
+  <h2>さいきん</h2>
+  <table id="rectable"></table>
+  <div class="row">
+    <button class="btn sub" id="rback">もどる</button>
+    <button class="btn sub warn" id="delrecs">この人の記録を消す</button>
+    <button class="btn sub warn" id="delperson">この人を消す</button>
+  </div>
+</div>
+
+<!-- 書き出し・読み込み -->
+<div class="screen" id="s-data">
+  <h1>きろくの書き出し・読み込み</h1>
+  <div class="note">この iPad の記録が消えたときのために、ときどき書き出して保管してください。</div>
+  <h2>書き出し</h2>
+  <button class="btn" id="dl">ファイルに保存</button>
+  <button class="btn" id="showtxt">文字で出す</button>
+  <h2>読み込み(いまの記録は置きかわります)</h2>
+  <input type="file" id="file" accept=".json,application/json,text/plain">
+  <div class="note" style="margin-top:10px">または、書き出した文字を下にはって「読み込む」:</div>
+  <textarea id="txt"></textarea>
+  <div class="row"><button class="btn" id="imp">読み込む</button></div>
+  <div class="err" id="dataerr"></div>
+  <div class="note" id="datamsg"></div>
+  <button class="btn sub" id="dback">もどる</button>
+</div>
+
+<!-- 確認 -->
+<div class="modal" id="modal"><div class="box">
+  <div id="mtext"></div>
+  <div style="margin-top:20px">
+    <button class="btn warn" id="myes">はい</button>
+    <button class="btn" id="mno">いいえ</button>
+  </div>
+</div></div>
+
+<script>
+(function(){
+var $=function(i){return document.getElementById(i)};
+var KEY="p7_kumon_timer";
+var VERSION=1;
+
+/* ---------- 保存 ---------- */
+var data={v:VERSION,people:[],records:[]};
+var storeOK=true;
+function load(){
+  try{
+    var s=localStorage.getItem(KEY);
+    if(s){var d=JSON.parse(s);if(d&&d.v===VERSION&&d.people&&d.records)data=d}
+  }catch(e){storeOK=false}
+}
+function save(){
+  try{localStorage.setItem(KEY,JSON.stringify(data));return true}
+  catch(e){storeOK=false;return false}
+}
+function uid(){return "x"+Date.now().toString(36)+Math.floor(Math.random()*1e6).toString(36)}
+function person(id){for(var i=0;i<data.people.length;i++)if(data.people[i].id===id)return data.people[i];return null}
+function recsOf(pid){return data.records.filter(function(r){return r.pid===pid})}
+
+/* ---------- 表示ヘルパー ---------- */
+function fmt(ms){var c=Math.floor(ms/10),m=Math.floor(c/6000),s=Math.floor(c/100)%60,h=c%100;
+  return m+":"+(s<10?"0":"")+s+"."+(h<10?"0":"")+h}
+function show(id){
+  var l=document.querySelectorAll(".screen");
+  for(var i=0;i<l.length;i++)l[i].className="screen";
+  $(id).className="screen on";
+  window.scrollTo(0,0);
+}
+function label(k){return (Math.floor(k/2)+1)+"枚目 "+(k%2===0?"表":"裏")}
+function ask(text,yes){
+  $("mtext").textContent=text;$("modal").className="modal on";
+  $("myes").onclick=function(){$("modal").className="modal";yes()};
+  $("mno").onclick=function(){$("modal").className="modal"};
+}
+function td(tr,txt,cls){var c=document.createElement("td");c.textContent=txt;if(cls)c.className=cls;tr.appendChild(c);return c}
+function clear(e){while(e.firstChild)e.removeChild(e.firstChild)}
+function bestOf(pid){
+  var rs=recsOf(pid),bp=null,bt={};
+  rs.forEach(function(r){
+    r.pages.forEach(function(p){if(bp===null||p<bp)bp=p});
+    var tot=r.pages.reduce(function(a,b){return a+b},0),n=r.pages.length;
+    if(bt[n]===undefined||tot<bt[n])bt[n]=tot;
+  });
+  return {page:bp,tot:bt};
+}
+
+/* ---------- 音 ---------- */
+var AC=window.AudioContext||window.webkitAudioContext,ctx=null;
+function unlock(){
+  try{if(!AC)return;if(!ctx)ctx=new AC();if(ctx.resume)ctx.resume()}catch(e){}
+}
+function tone(freq,at,dur,vol){
+  try{
+    if(!ctx)return;
+    var o=ctx.createOscillator(),g=ctx.createGain(),t=ctx.currentTime+at;
+    o.frequency.value=freq;g.gain.value=vol||0.3;
+    o.connect(g);g.connect(ctx.destination);o.start(t);o.stop(t+dur);
+  }catch(e){}
+}
+function sndStart(){tone(1047,0,0.5,0.35)}
+function sndCount(){tone(660,0,0.15,0.3)}
+function sndEnd(){tone(784,0,0.15);tone(988,0.18,0.15);tone(1319,0.36,0.4)}
+function sndTap(){tone(880,0,0.08,0.25)}
+
+/* ---------- ホーム ---------- */
+var curPid=null;
+function renderPeople(){
+  var box=$("people");clear(box);
+  if(curPid&&!person(curPid))curPid=null;
+  data.people.forEach(function(p){
+    var b=document.createElement("button");
+    b.className="person"+(p.id===curPid?" sel":"");
+    b.textContent=p.name;
+    b.onclick=function(){curPid=p.id;renderPeople()};
+    box.appendChild(b);
+  });
+  $("nopeople").style.display=data.people.length?"none":"block";
+  $("tosheets").disabled=!curPid;
+  $("torecords").disabled=!curPid;
+}
+$("addperson").onclick=function(){
+  var n=$("newname").value.replace(/^\s+|\s+$/g,"");
+  var e=$("homeerr");e.textContent="";
+  if(!n){e.textContent="名前を入れてください";return}
+  for(var i=0;i<data.people.length;i++)if(data.people[i].name===n){e.textContent="同じ名前がいます";return}
+  if(data.people.length>=8){e.textContent="8人までです";return}
+  var p={id:uid(),name:n};
+  data.people.push(p);curPid=p.id;
+  if(!save())e.textContent="この iPad に保存できませんでした(記録が残りません)";
+  $("newname").value="";renderPeople();
+};
+$("tosheets").onclick=function(){
+  if(!curPid)return;
+  $("who1").textContent=person(curPid).name;
+  $("storeerr").textContent=storeOK?"":"この iPad に保存できません。記録が残らない可能性があります。";
+  setSheets(sheets);show("s-sheets");
+};
+$("torecords").onclick=function(){if(curPid)showRecords()};
+$("todata").onclick=function(){$("dataerr").textContent="";$("datamsg").textContent="";$("txt").value="";show("s-data")};
+
+/* ---------- 枚数 ---------- */
+var sheets=3;
+function setSheets(n){
+  if(n<1)n=1;if(n>20)n=20;
+  sheets=n;$("sheetnum").textContent=n;$("pagecnt").textContent=n*2;
+}
+$("minus").onclick=function(){setSheets(sheets-1)};
+$("plus").onclick=function(){setSheets(sheets+1)};
+$("back1").onclick=function(){show("s-home")};
+$("gomeasure").onclick=function(){unlock();startSession()};
+
+/* ---------- 測る ---------- */
+var S=null; // 進行状況
+var raf=window.requestAnimationFrame||function(f){return setTimeout(f,16)};
+function startSession(){
+  S={n:sheets*2,k:-1,times:[],t0:0,state:"ready",lock:0,timer:null,pid:curPid};
+  $("pagelabel").textContent=sheets+"枚("+(sheets*2)+"ページ)";
+  $("hint").textContent="スタートを押すと はじまります";
+  $("clock").textContent="0:00.00";$("clock").style.display="block";
+  $("cd").style.display="none";$("flash").textContent="";
+  $("done").textContent="スタート";$("done").className="start";$("done").style.display="block";
+  $("abort").style.display="inline-block";
+  show("s-measure");
+}
+function beginPage(){
+  S.k++;S.state="run";S.t0=Date.now();S.lock=S.t0+600;
+  $("cd").style.display="none";$("clock").style.display="block";
+  $("pagelabel").textContent=label(S.k);
+  $("hint").textContent="おわったら 大きいボタンを押す";
+  $("done").textContent="おわった!";$("done").className="";$("done").style.display="block";
+  sndStart();tick();
+}
+function tick(){
+  if(!S||S.state!=="run")return;
+  $("clock").textContent=fmt(Date.now()-S.t0);
+  raf(tick);
+}
+function countdown(n){
+  if(!S||S.state!=="count")return;
+  if(n===0){beginPage();return}
+  $("cd").textContent=n;if(n<=3)sndCount();
+  S.timer=setTimeout(function(){countdown(n-1)},1000);
+}
+$("done").onclick=function(){
+  if(!S)return;
+  if(S.state==="ready"){beginPage();return}
+  if(S.state!=="run")return;
+  var now=Date.now();
+  if(now<S.lock)return; // 押しまちがい・連打をむし
+  var ms=now-S.t0;
+  S.times.push(ms);
+  S.state="count";
+  $("clock").textContent=fmt(ms);
+  var k=S.k,msg=[];
+  if(k>0){
+    if(ms<S.times[0])msg.push("はやい!");
+    var minPrev=Math.min.apply(null,S.times.slice(0,k));
+    if(ms<minPrev)msg.push("新記録!");
+  }
+  $("flash").textContent=msg.join(" ");
+  if(S.times.length>=S.n){finish();return}
+  sndTap();
+  $("done").style.display="none";
+  $("pagelabel").textContent="つぎ: "+label(S.k+1);
+  $("hint").textContent=label(k)+" "+fmt(ms);
+  $("clock").style.display="none";
+  $("cd").style.display="block";
+  countdown(10);
+};
+$("abort").onclick=function(){
+  if(!S)return;
+  ask("やめますか?(ここまでの記録はのこりません)",function(){
+    if(S&&S.timer)clearTimeout(S.timer);
+    S=null;show("s-home");
+  });
+};
+function finish(){
+  var s=S;S=null;
+  sndEnd();
+  var prev=bestOf(s.pid); // 今回を足す前の自己ベスト
+  var rec={id:uid(),pid:s.pid,at:new Date().toISOString(),pages:s.times.slice()};
+  data.records.push(rec);
+  var ok=save();
+  renderResult(rec,prev,ok);
+}
+
+/* ---------- 結果 ---------- */
+function renderResult(rec,prev,ok){
+  var t=$("restable");clear(t);
+  var th=document.createElement("tr");
+  td(th,"ページ");td(th,"じかん","t");td(th,"");
+  t.appendChild(th);
+  var pages=rec.pages,minSoFar=null,tot=0;
+  pages.forEach(function(ms,k){
+    tot+=ms;
+    var tr=document.createElement("tr"),c=td(tr,label(k));
+    td(tr,fmt(ms),"t");
+    var tg=td(tr,"");
+    function tag(x,cls){var s=document.createElement("span");s.className="tag "+(cls||"");s.textContent=x;tg.appendChild(s)}
+    if(k>0&&ms<pages[0])tag("はやい!");
+    if(k>0&&ms<minSoFar)tag("新記録","rec");
+    if(prev.page!==null&&ms<prev.page)tag("じぶん最高","best");
+    if(minSoFar===null||ms<minSoFar)minSoFar=ms;
+    t.appendChild(tr);
+  });
+  $("who2").textContent=person(rec.pid)?person(rec.pid).name:"";
+  $("rtotal").textContent=fmt(tot);
+  $("ravg").textContent=fmt(Math.round(tot/pages.length));
+  var c=$("cmp");clear(c);
+  function line(txt){var d=document.createElement("div");d.className="sum";d.style.fontSize="26px";d.textContent=txt;c.appendChild(d)}
+  var fast=Math.min.apply(null,pages);
+  var pt=prev.tot[pages.length];
+  line("これまでの最速ページ: "+(prev.page===null?"なし(今回がはじめて)":fmt(prev.page)));
+  line("今回の最速ページ: "+fmt(fast)+((prev.page!==null&&fast<prev.page)?"  ★更新!":""));
+  line("同じ"+(pages.length/2)+"枚のこれまでの最短ごうけい: "+(pt===undefined?"なし(今回がはじめて)":fmt(pt)));
+  if(pt!==undefined&&tot<pt)line("★ ごうけい時間も 自己ベスト!");
+  $("saveerr").textContent=ok?"":"この iPad に保存できませんでした。記録が残りません。";
+  show("s-result");
+}
+$("rhome").onclick=function(){renderPeople();show("s-home")};
+
+/* ---------- 記録を見る ---------- */
+function showRecords(){
+  var p=person(curPid);if(!p)return;
+  $("who3").textContent=p.name;
+  var b=bestOf(curPid),bx=$("bests");clear(bx);
+  function line(txt){var d=document.createElement("div");d.className="sum";d.style.fontSize="26px";d.textContent=txt;bx.appendChild(d)}
+  if(b.page===null){line("まだ記録がありません")}
+  else{
+    line("最速ページ: "+fmt(b.page));
+    var ks=Object.keys(b.tot).sort(function(a,b){return a-b});
+    ks.forEach(function(n){line((n/2)+"枚の最短ごうけい: "+fmt(b.tot[n]))});
+  }
+  var t=$("rectable");clear(t);
+  var h=document.createElement("tr");td(h,"日にち");td(h,"枚");td(h,"ごうけい","t");td(h,"へいきん","t");t.appendChild(h);
+  var rs=recsOf(curPid).slice().reverse().slice(0,20);
+  rs.forEach(function(r){
+    var tot=r.pages.reduce(function(a,b){return a+b},0),d=new Date(r.at);
+    var tr=document.createElement("tr");
+    td(tr,(d.getMonth()+1)+"/"+d.getDate()+" "+d.getHours()+":"+(d.getMinutes()<10?"0":"")+d.getMinutes());
+    td(tr,(r.pages.length/2)+"枚");
+    td(tr,fmt(tot),"t");td(tr,fmt(Math.round(tot/r.pages.length)),"t");
+    t.appendChild(tr);
+  });
+  show("s-records");
+}
+$("rback").onclick=function(){renderPeople();show("s-home")};
+$("delrecs").onclick=function(){
+  var p=person(curPid);if(!p)return;
+  ask(p.name+" さんの記録を ぜんぶ消しますか?(もとにもどせません)",function(){
+    data.records=data.records.filter(function(r){return r.pid!==curPid});
+    save();showRecords();
+  });
+};
+$("delperson").onclick=function(){
+  var p=person(curPid);if(!p)return;
+  ask(p.name+" さんを、記録ごと消しますか?(もとにもどせません)",function(){
+    data.records=data.records.filter(function(r){return r.pid!==curPid});
+    data.people=data.people.filter(function(x){return x.id!==curPid});
+    curPid=null;save();renderPeople();show("s-home");
+  });
+};
+
+/* ---------- 書き出し・読み込み ---------- */
+function exportText(){return JSON.stringify(data)}
+$("dl").onclick=function(){
+  try{
+    var b=new Blob([exportText()],{type:"application/json"});
+    var a=document.createElement("a");
+    a.href=URL.createObjectURL(b);a.download="kumon-timer-backup.json";
+    document.body.appendChild(a);a.click();document.body.removeChild(a);
+    $("datamsg").textContent="保存を始めました。出ないときは「文字で出す」を使ってください。";
+  }catch(e){$("dataerr").textContent="ファイル保存できません。「文字で出す」を使ってください。"}
+};
+$("showtxt").onclick=function(){
+  var t=$("txt");t.value=exportText();t.focus();t.select();
+  $("datamsg").textContent="この文字を ぜんぶコピーして、メモなどに保管してください。";
+};
+function doImport(text){
+  var e=$("dataerr");e.textContent="";$("datamsg").textContent="";
+  var d;
+  try{d=JSON.parse(text)}catch(x){e.textContent="読み込めません(形がちがいます)";return}
+  if(!d||d.v!==VERSION||!d.people||!d.records){e.textContent="読み込めません(このアプリの記録ではありません)";return}
+  ask("いまの記録を、読み込む記録に置きかえます。よいですか?",function(){
+    data=d;curPid=null;
+    $("datamsg").textContent=save()?"読み込みました。":"読み込みましたが保存できませんでした。";
+    renderPeople();
+  });
+}
+$("imp").onclick=function(){doImport($("txt").value)};
+$("file").onchange=function(){
+  var f=this.files&&this.files[0];if(!f)return;
+  var r=new FileReader();
+  r.onload=function(){doImport(String(r.result))};
+  r.onerror=function(){$("dataerr").textContent="ファイルを読めません"};
+  r.readAsText(f);
+};
+$("dback").onclick=function(){renderPeople();show("s-home")};
+
+/* ---------- 拡大(ダブルタップ・ピンチ)を止める ---------- */
+var lastTouch=0;
+document.addEventListener("touchend",function(e){
+  var n=Date.now();
+  if(n-lastTouch<400){var t=e.target;if(!(t&&(t.tagName==="INPUT"||t.tagName==="TEXTAREA")))e.preventDefault()}
+  lastTouch=n;
+},false);
+document.addEventListener("gesturestart",function(e){e.preventDefault()},false);
+
+/* ---------- 起動 ---------- */
+load();
+if(!storeOK)$("homeerr").textContent="この iPad に保存できません(プライベートブラウズ?)。記録が残りません。";
+renderPeople();
+// 画面を閉じようとしたとき、測定中なら警告
+window.onbeforeunload=function(){if(S&&S.state!=="ready")return "測定中です"};
+})();
+</script>
+</body>
+</html>
